@@ -108,14 +108,18 @@ func readHover(ctx context.Context, key hoverKey) (string, error) {
 			}
 		}
 	}
-	if key.Diagnostic != "" {
-		if text != "" {
-			text = key.Diagnostic + "\n---\n" + text
-		} else {
-			text = key.Diagnostic
-		}
-	}
+	text = joinHoverText(key.Diagnostic, text)
 	return text, nil
+}
+
+func joinHoverText(diagnostic, text string) string {
+	if diagnostic == "" {
+		return text
+	}
+	if text == "" {
+		return diagnostic
+	}
+	return diagnostic + "\n\n---\n\n" + text
 }
 
 func (a *App) stopHoverTask() {

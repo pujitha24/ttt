@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/eugenioenko/ttt/internal/config"
 	"github.com/eugenioenko/ttt/internal/core/undo"
 	"github.com/eugenioenko/ttt/internal/lsp"
+	"github.com/eugenioenko/ttt/internal/markdown"
 	"github.com/eugenioenko/ttt/internal/ui"
 )
 
@@ -146,5 +148,37 @@ func TestHoverHeadlessEmptyReplyClearsPreviousPopup(t *testing.T) {
 	a.RequestHover(a.EditorGroup.ActiveFilePath(), "plaintext", 0, 1, 8, 4, "")
 	if a.EditorGroup.Hover != nil {
 		t.Fatal("empty headless reply retained old hover")
+	}
+}
+
+func TestJoinHoverTextSeparatesDiagnosticWithDivider(t *testing.T) {
+	lines := markdown.Render(joinHoverText("declared and not used: x", "var x int"))
+	var content []markdown.Line
+	hasDivider := false
+	for _, l := range lines {
+		if l.Kind == markdown.KindHeading {
+			t.Fatalf("unexpected heading line %q", l.Text())
+		}
+		if l.Kind == markdown.KindDivider {
+			hasDivider = true
+		}
+		if l.Kind != markdown.KindBlank {
+			content = append(content, l)
+		}
+	}
+	if !hasDivider {
+		t.Fatal("no divider line")
+	}
+	if first := content[0]; first.Kind != markdown.KindParagraph || first.Text() != "declared and not used: x" {
+		t.Fatalf("first line = %v %q", first.Kind, first.Text())
+	}
+	if last := content[len(content)-1]; !strings.Contains(last.Text(), "var x int") {
+		t.Fatalf("last line = %q", last.Text())
+	}
+	if got := joinHoverText("", "var x int"); got != "var x int" {
+		t.Fatalf("empty diagnostic: %q", got)
+	}
+	if got := joinHoverText("diagnostic", ""); got != "diagnostic" {
+		t.Fatalf("empty text: %q", got)
 	}
 }
