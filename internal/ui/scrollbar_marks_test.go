@@ -12,6 +12,8 @@ import (
 	"github.com/eugenioenko/ttt/internal/core/fold"
 	"github.com/eugenioenko/ttt/internal/term"
 	"github.com/eugenioenko/ttt/internal/view"
+
+	"github.com/gdamore/tcell/v3"
 )
 
 func TestScrollbarMarkSingleItemInHugeRangeStaysVisible(t *testing.T) {
@@ -325,5 +327,74 @@ func TestDiffScrollMarksCountWrappedDeletedRows(t *testing.T) {
 	marks := d.unified.scrollbar.Marks
 	if len(marks) != 1 || marks[0].Item != 5 || marks[0].Count < 2 || marks[0].Style != term.StyleScrollMarkDeleted {
 		t.Fatalf("marks = %v, want one deleted mark at row 5 spanning its wrapped rows", marks)
+	}
+}
+
+func clickScrollbar(s *Scrollbar, y int) (int, bool) {
+	return s.HandleEvent(tcell.NewEventMouse(s.X, s.Y+y, tcell.Button1, tcell.ModNone))
+}
+
+func TestScrollbarClickOnMarkJumpsToChangeWithoutDragging(t *testing.T) {
+	scrollbar := Scrollbar{Height: 10, TotalItems: 1000, Marks: []ScrollMark{
+		{Item: 800, Count: 1, Style: term.StyleScrollMarkAdded, Rank: 1},
+		{Item: 805, Count: 1, Style: term.StyleScrollMarkDeleted, Rank: 2},
+	}}
+	top, consumed := clickScrollbar(&scrollbar, 8)
+	if !consumed || top != 802 {
+		t.Fatalf("click on mark = (%d, %v), want (802, true)", top, consumed)
+	}
+	if scrollbar.IsDragging() {
+		t.Fatal("click on a mark started a drag")
+	}
+}
+
+func TestScrollbarClickOnMarkClampsToScrollableRange(t *testing.T) {
+	scrollbar := Scrollbar{Height: 10, TotalItems: 100, Marks: []ScrollMark{
+		{Item: 98, Count: 1, Style: term.StyleScrollMarkAdded, Rank: 1},
+		{Item: 1, Count: 1, Style: term.StyleScrollMarkAdded, Rank: 1},
+	}}
+	if top, _ := clickScrollbar(&scrollbar, 9); top != 90 {
+		t.Fatalf("bottom mark top = %d, want 90", top)
+	}
+	scrollbar.dragging = false
+	if top, _ := clickScrollbar(&scrollbar, 0); top != 0 {
+		t.Fatalf("top mark top = %d, want 0", top)
+	}
+}
+
+func TestScrollbarClickOnThumbOverMarkStillDrags(t *testing.T) {
+	scrollbar := Scrollbar{Height: 10, TotalItems: 1000, Marks: []ScrollMark{
+		{Item: 5, Count: 1, Style: term.StyleScrollMarkAdded, Rank: 1},
+	}}
+	if _, consumed := clickScrollbar(&scrollbar, 0); !consumed || !scrollbar.IsDragging() {
+		t.Fatal("click on the thumb over a mark did not start a drag")
+	}
+}
+
+func TestScrollbarClickOnUnmarkedCellScrollsProportionally(t *testing.T) {
+	scrollbar := Scrollbar{Height: 10, TotalItems: 1000, Marks: []ScrollMark{
+		{Item: 800, Count: 1, Style: term.StyleScrollMarkAdded, Rank: 1},
+	}}
+	top, consumed := clickScrollbar(&scrollbar, 4)
+	if !consumed || !scrollbar.IsDragging() || top != scrollbar.posToTopItem(4-scrollbar.dragOffset) {
+		t.Fatalf("unmarked click = (%d, %v), dragging %v", top, consumed, scrollbar.IsDragging())
+	}
+}
+
+func TestEditorClickOnScrollbarMarkShowsChange(t *testing.T) {
+	editor := newMarksTestEditor(1000)
+	changes := make([]diff.LineChangeKind, 1000)
+	changes[900] = diff.LineModified
+	editor.LineChanges = changes
+	editor.SetRect(Rect{W: 40, H: 10})
+	editor.Render(NewRenderSurface(makeGrid(40, 10), Rect{W: 40, H: 10}))
+
+	// TotalItems = 1009, 80 slots: line 900 -> slot 71, row 8.
+	editor.HandleEvent(tcell.NewEventMouse(editor.scrollbar.X, editor.scrollbar.Y+8, tcell.Button1, tcell.ModNone))
+	if top := editor.Viewport.TopLine; top > 900 || top+10 <= 900 {
+		t.Fatalf("top line = %d, want line 900 on screen", top)
+	}
+	if editor.scrollbar.IsDragging() {
+		t.Fatal("click on a mark started a drag")
 	}
 }

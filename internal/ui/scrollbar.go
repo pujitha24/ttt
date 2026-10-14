@@ -236,6 +236,12 @@ func (s *Scrollbar) HandleEvent(ev tcell.Event) (newTopItem int, consumed bool) 
 		relY := my - s.Y
 		thumbTop, thumbH := s.ThumbPos()
 
+		if relY < thumbTop || relY >= thumbTop+thumbH {
+			if item, ok := s.markTarget(relY); ok {
+				return item, true
+			}
+		}
+
 		s.dragging = true
 		if relY >= thumbTop && relY < thumbTop+thumbH {
 			s.dragOffset = relY - thumbTop
@@ -250,6 +256,38 @@ func (s *Scrollbar) HandleEvent(ev tcell.Event) (newTopItem int, consumed bool) 
 }
 
 func (s *Scrollbar) IsDragging() bool { return s.dragging }
+
+// markContextItems is how many items stay above a mark jumped to by a click.
+const markContextItems = 3
+
+// markTarget returns the top item that shows the mark drawn in track cell
+// relY: the highest rank among the marks covering the cell's slots.
+func (s *Scrollbar) markTarget(relY int) (top int, ok bool) {
+	if s.TotalItems <= 0 {
+		return 0, false
+	}
+	total := cellSlots * s.Height
+	slotOf := func(item int) int {
+		return max(0, min(item*total/s.TotalItems, total-1))
+	}
+	cellFirst, cellLast := relY*cellSlots, (relY+1)*cellSlots-1
+	best := -1
+	for i, mark := range s.Marks {
+		first := slotOf(mark.Item)
+		last := slotOf(mark.Item + max(mark.Count, 1) - 1)
+		if last < cellFirst || first > cellLast {
+			continue
+		}
+		if best < 0 || mark.Rank > s.Marks[best].Rank {
+			best = i
+		}
+	}
+	if best < 0 {
+		return 0, false
+	}
+	top = s.Marks[best].Item - markContextItems
+	return max(0, min(top, s.TotalItems-s.Height)), true
+}
 
 func (s *Scrollbar) posToTopItem(thumbTop int) int {
 	_, thumbH := s.ThumbPos()
