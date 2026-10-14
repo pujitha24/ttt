@@ -208,3 +208,24 @@ func TestFuzzyFilterFilesDetail(t *testing.T) {
 		t.Fatalf("expected detail 'src/components', got %q", items[0].Detail)
 	}
 }
+
+func TestListDirFilesIncludesHiddenFiles(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, ".config", "fish"), 0o755)
+	os.MkdirAll(filepath.Join(dir, ".git"), 0o755)
+	os.WriteFile(filepath.Join(dir, ".config", "fish", "config.fish"), []byte(""), 0o644)
+	os.WriteFile(filepath.Join(dir, ".git", "HEAD"), []byte(""), 0o644)
+	os.WriteFile(filepath.Join(dir, "main.go"), []byte(""), 0o644)
+
+	files := listDirFiles(dir, "")
+
+	var rels []string
+	for _, f := range files {
+		rels = append(rels, f.Rel)
+	}
+	sort.Strings(rels)
+	want := []string{filepath.Join(".config", "fish", "config.fish"), "main.go"}
+	if strings.Join(rels, "|") != strings.Join(want, "|") {
+		t.Fatalf("expected %v, got %v", want, rels)
+	}
+}

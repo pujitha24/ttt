@@ -25,7 +25,7 @@ func listWorkspaceFiles(workDirs []string) []paletteFile {
 
 func listDirFiles(workDir, prefix string) []paletteFile {
 	if _, err := exec.LookPath("rg"); err == nil {
-		if files, ok := listFilesCmdLines(workDir, prefix, "rg", "--files"); ok {
+		if files, ok := listFilesCmdLines(workDir, prefix, "rg", "--files", "--hidden", "--glob", "!.git"); ok {
 			return files
 		}
 	}
